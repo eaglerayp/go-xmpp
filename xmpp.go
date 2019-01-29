@@ -575,6 +575,8 @@ type Chat struct {
 	Text      string
 	Subject   string
 	Thread    string
+	ID        string
+	To        string
 	Roster    Roster
 	Other     []string
 	OtherElem []XMLElement
@@ -626,6 +628,8 @@ func (c *Client) Recv() (stanza interface{}, err error) {
 				Text:      v.Body,
 				Subject:   v.Subject,
 				Thread:    v.Thread,
+				ID:        v.ID,
+				To:        v.To,
 				Other:     v.OtherStrings(),
 				OtherElem: v.Other,
 				Stamp:     stamp,
@@ -652,6 +656,10 @@ func (c *Client) Recv() (stanza interface{}, err error) {
 	}
 }
 
+func (c *Client) widgetDomain() string {
+	return "widget." + c.domain
+}
+
 // Send sends the message wrapped inside an XMPP message stanza body.
 func (c *Client) Send(chat Chat) (n int, err error) {
 	var subtext = ``
@@ -663,10 +671,15 @@ func (c *Client) Send(chat Chat) (n int, err error) {
 		thdtext = `<thread>` + xmlEscape(chat.Thread) + `</thread>`
 	}
 
-	stanza := "<message to='%s' type='%s' id='%s' xml:lang='en'>" + subtext + "<body>%s</body>" + thdtext + "</message>"
+	stanza := `<message from='%s' to='%s' type='%s' id='%s' xml:lang='en' xmlns="jabber:client" ts="%s">` + subtext + `<body>%s</body>` + thdtext + "</message>"
 
-	return fmt.Fprintf(c.conn, stanza,
-		xmlEscape(chat.Remote), xmlEscape(chat.Type), cnonce(), xmlEscape(chat.Text))
+	return fmt.Fprintf(c.conn, stanza, xmlEscape(c.JID()),
+		xmlEscape(chat.Remote), xmlEscape(chat.Type), xmlEscape(c.generateMessageID(chat)), xmlEscape(time.Now().Format(time.RFC3339)), xmlEscape(chat.Text))
+}
+
+func (c *Client) generateMessageID(chat Chat) string {
+	inquiryID := strings.Split(chat.Remote, "@")[0]
+	return fmt.Sprintf("%s@%s:%d:m800chatbot", inquiryID, c.widgetDomain(), time.Now().Unix())
 }
 
 // SendOrg sends the original text without being wrapped in an XMPP message stanza.
@@ -695,6 +708,22 @@ func (c *Client) SendHtml(chat Chat) (n int, err error) {
 func (c *Client) Roster() error {
 	fmt.Fprintf(c.conn, "<iq from='%s' type='get' id='roster1'><query xmlns='jabber:iq:roster'/></iq>\n", xmlEscape(c.jid))
 	return nil
+}
+
+// Send sends the message wrapped inside an XMPP message stanza body.
+func (c *Client) SendReceipts(chat Chat) (n int, err error) {
+	// received
+	messageID := c.generateMessageID(chat)
+	received := fmt.Sprintf(`<message xmlns="jabber:client" id="%s-rec" from="%s" to="%s" ts="%s">
+	<thread>%s</thread>
+	<received xmlns="urn:xmpp:receipts" id="%s"/></message>`, xmlEscape(messageID), xmlEscape(chat.To), xmlEscape(chat.Remote), xmlEscape(time.Now().Format(time.RFC3339)), xmlEscape(chat.Thread), xmlEscape(chat.ID))
+
+	fmt.Fprintf(c.conn, received)
+	// displayed
+	displayed := fmt.Sprintf(`<message xmlns="jabber:client" id="%s-dis" from="%s" to="%s" ts="%s">
+	<thread>%s</thread>
+    <displayed xmlns="urn:maaii:receipts" id="%s"/></message>`, xmlEscape(messageID), xmlEscape(chat.To), xmlEscape(chat.Remote), xmlEscape(time.Now().Format(time.RFC3339)), xmlEscape(chat.Thread), xmlEscape(chat.ID))
+	return fmt.Fprintf(c.conn, displayed)
 }
 
 // RFC 3920  C.1  Streams name space
