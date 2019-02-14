@@ -451,7 +451,6 @@ func (c *Client) init(o *Options) error {
 
 	// Generate a unique cookie
 	cookie := getCookie()
-
 	// Send IQ message asking to bind to the local user name.
 	if o.Resource == "" {
 		fmt.Fprintf(c.conn, "<iq type='set' id='%x'><bind xmlns='%s'></bind></iq>\n", cookie, nsBind)
@@ -462,7 +461,7 @@ func (c *Client) init(o *Options) error {
 	if err = c.p.DecodeElement(&iq, nil); err != nil {
 		return errors.New("unmarshal <iq>: " + err.Error())
 	}
-	if &iq.Bind == nil {
+	if &iq.Bind == nil || len(iq.Bind.Jid) == 0 {
 		return errors.New("<iq> result missing <bind>")
 	}
 	c.jid = iq.Bind.Jid // our local id
@@ -472,10 +471,8 @@ func (c *Client) init(o *Options) error {
 		//if server support session, open it
 		fmt.Fprintf(c.conn, "<iq to='%s' type='set' id='%x'><session xmlns='%s'/></iq>", xmlEscape(domain), cookie, nsSession)
 	}
-
 	// We're connected and can now receive and send messages.
 	fmt.Fprintf(c.conn, "<presence xml:lang='en'><show>%s</show><status>%s</status></presence>", o.Status, o.StatusMessage)
-
 	return nil
 }
 
@@ -689,6 +686,10 @@ func (c *Client) SendOrg(org string) (n int, err error) {
 
 func (c *Client) SendPresence(presence Presence) (n int, err error) {
 	return fmt.Fprintf(c.conn, "<presence from='%s' to='%s'/>", xmlEscape(presence.From), xmlEscape(presence.To))
+}
+
+func (c *Client) SendMaaiiPresence() (n int, err error) {
+	return fmt.Fprintf(c.conn, `<presence xml:lang='en' type="available" xmlns="jabber:client" from="%s"></presence>`, c.jid)
 }
 
 // SendKeepAlive sends a "whitespace keepalive" as described in chapter 4.6.1 of RFC6120.
