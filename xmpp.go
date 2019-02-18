@@ -669,9 +669,8 @@ func (c *Client) Send(chat Chat) (n int, err error) {
 	}
 
 	stanza := `<message from='%s' to='%s' type='%s' id='%s' xml:lang='en' xmlns="jabber:client" ts="%s">` + subtext + `<body>%s</body>` + thdtext + "</message>"
-
 	return fmt.Fprintf(c.conn, stanza, xmlEscape(c.JID()),
-		xmlEscape(chat.Remote), xmlEscape(chat.Type), xmlEscape(c.generateMessageID(chat)), xmlEscape(time.Now().Format(time.RFC3339)), xmlEscape(chat.Text))
+		xmlEscape(chat.Remote), xmlEscape(chat.Type), xmlEscape(c.generateMessageID(chat)), xmlEscape(time.Now().Format(time.RFC3339)), chat.Text)
 }
 
 func (c *Client) generateMessageID(chat Chat) string {
